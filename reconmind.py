@@ -12,6 +12,12 @@ from tools import STAGE_TOOLS, TOOL_FUNCTIONS
 
 STAGES = ["company_info", "sensitive_info", "subdomain", "cyberspace", "fingerprint", "report"]
 TOOL_OUTPUT_LIMIT = 4000
+STAGE_START_INSTRUCTION = (
+    "请开始执行本阶段任务。侦察工具通常会自动更新 output/state.json 中的 "
+    "domains/subdomains/ips/urls/emails/fingerprints；你应优先通过 "
+    'read_file("output/state.json") 查看最新状态。仅在 sensitive_findings 等少数字段需要补充时，'
+    '才使用 write_file("output/state.json", ...) 手动写回。'
+)
 
 config = load_config()
 MAX_ITER_PER_STAGE = int(config["agent"].get("max_iterations", 15))
@@ -385,7 +391,7 @@ def _run_stage_chat(stage_name: str, stage_prompt: str, stage_context: str, tool
         {"role": "system", "content": stage_prompt},
         {
             "role": "user",
-            "content": stage_context + "\n请开始执行本阶段任务。通过 read_file/write_file 操作 state.json 来读写收集到的数据。",
+            "content": stage_context + "\n" + STAGE_START_INSTRUCTION,
         },
     ]
 
@@ -422,7 +428,7 @@ def _run_stage_responses(stage_name: str, stage_prompt: str, stage_context: str,
         {"role": "system", "content": stage_prompt},
         {
             "role": "user",
-            "content": stage_context + "\n请开始执行本阶段任务。通过 read_file/write_file 操作 state.json 来读写收集到的数据。",
+            "content": stage_context + "\n" + STAGE_START_INSTRUCTION,
         },
     ]
     response_tools = _to_responses_tools(tools)
@@ -500,6 +506,52 @@ def run_stage(stage_name: str, state: dict) -> dict:
     raise RuntimeError(f"[{stage_name}] 无可用 LLM 协议")
 
 
+def _has_nonempty_file(path: str) -> bool:
+    return os.path.isfile(path) and os.path.getsize(path) > 0
+
+
+def _validate_stage_artifacts(stage_name: str, state: dict) -> List[str]:
+    out_dir = config["agent"]["output_dir"]
+    results = state.get("results", {})
+    errors: List[str] = []
+
+    if stage_name == "report":
+        report_path = os.path.join(out_dir, "target_report.md")
+        if not os.path.isfile(report_path):
+            errors.append(f"缺少报告文件: {report_path}")
+
+    if stage_name in {"subdomain", "cyberspace", "fingerprint", "report"} and results.get("subdomains"):
+        subdomain_path = os.path.join(out_dir, "subdomain.txt")
+        if not _has_nonempty_file(subdomain_path):
+            errors.append(
+                f"state.results.subdomains 非空，但 {subdomain_path} 不存在或为空。"
+            )
+
+    if stage_name in {"cyberspace", "fingerprint", "report"} and results.get("urls"):
+        url_path = os.path.join(out_dir, "url.txt")
+        if not _has_nonempty_file(url_path):
+            errors.append(
+                f"state.results.urls 非空，但 {url_path} 不存在或为空。"
+            )
+
+    return errors
+
+
+def _complete_stage_or_raise(stage_name: str, state: dict) -> None:
+    errors = _validate_stage_artifacts(stage_name, state)
+    if errors:
+        state["progress"][stage_name] = "pending"
+        save_state(state)
+        detail = "\n".join(f"- {line}" for line in errors)
+        raise RuntimeError(
+            f"[校验失败] 阶段 {stage_name} 未满足完成条件:\n{detail}\n"
+            "[提示] 修复对应输出后，重跑同一命令即可从未完成阶段继续。"
+        )
+
+    state["progress"][stage_name] = "completed"
+    save_state(state)
+
+
 def run_recon(company_name: str, domains=None, ips=None) -> None:
     state = init_state(company_name, domains, ips)
 
@@ -513,8 +565,7 @@ def run_recon(company_name: str, domains=None, ips=None) -> None:
         state["progress"][stage] = "in_progress"
         save_state(state)
         state = run_stage(stage, state)
-        state["progress"][stage] = "completed"
-        save_state(state)
+        _complete_stage_or_raise(stage, state)
 
         if stage == "cyberspace":
             new_domains = set(state["results"]["domains"]) - domains_before
@@ -524,8 +575,7 @@ def run_recon(company_name: str, domains=None, ips=None) -> None:
                 state["progress"]["subdomain"] = "in_progress"
                 save_state(state)
                 state = run_stage("subdomain", state)
-                state["progress"]["subdomain"] = "completed"
-                save_state(state)
+                _complete_stage_or_raise("subdomain", state)
 
     print(f"\n{'=' * 60}")
     print("  ReconMind 完成")

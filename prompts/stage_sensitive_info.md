@@ -43,4 +43,5 @@
 
 ### 完成标志
 
-将所有发现的敏感信息写入 state.json 的 sensitive_findings，新发现的域名/邮箱写入对应字段。输出发现摘要后结束。
+将确认后的敏感发现写入 state.json 的 `sensitive_findings`（该字段通常需要你手动 write_file 维护）。
+其他结果若工具已自动写入则无需重复回填；仅在确有缺失时再手动补充。输出发现摘要后结束。

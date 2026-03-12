@@ -7,8 +7,8 @@
 1. 先 read_file("output/state.json") 获取所有已知域名
 2. 对每个域名使用 subfinder 被动收集
 3. 对每个域名使用 ksubdomain 字典爆破
-4. 合并所有结果，去重后更新 state.json 的 subdomains 字段
-5. 同时将子域名列表写入 output/subdomain.txt（每行一个）
+4. subfinder/ksubdomain 通常会自动去重并更新 state.json 的 `subdomains`，同时维护 `output/subdomain.txt`
+5. 仅当发现结果未自动落盘时，才手动修正 state.json 或文件
 
 ### 红队思维
 
@@ -17,4 +17,4 @@
 
 ### 完成标志
 
-所有域名的子域名收集完毕，state.json 和 subdomain.txt 已更新。输出统计摘要后结束。
+所有域名的子域名收集完毕，且 state.json/subdomain.txt 反映最新结果后，输出统计摘要结束。

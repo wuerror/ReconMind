@@ -9,7 +9,17 @@
 
 # state.json 操作规范
 
-你通过 read_file("output/state.json") 读取当前数据，通过 write_file("output/state.json", ...) 更新数据。
+大部分侦察工具会自动更新 `output/state.json`，你默认不需要手动维护这些字段：
+- `domains`
+- `subdomains`
+- `ips`
+- `urls`
+- `emails`
+- `fingerprints`
+
+你应优先通过 `read_file("output/state.json")` 读取最新状态，再决定下一步行动。
+只有少数字段/场景需要你手动写回（例如 `sensitive_findings`），这时才使用 `write_file("output/state.json", ...)`。
+
 state.json 的结构如下，你必须严格遵守此格式，不要增删字段：
 
 {
@@ -37,6 +47,6 @@ state.json 的结构如下，你必须严格遵守此格式，不要增删字段
   }
 }
 
-更新时：先 read_file 读取最新版本，修改后整体 write_file 回去。注意保留已有数据，只追加新发现，不要覆盖。列表字段追加前先去重。
+当且仅当需要手动更新时：先 `read_file` 读取最新版本，修改后整体 `write_file` 回去。注意保留已有数据，只追加新发现，不要覆盖。列表字段追加前先去重。
 
 # 当前阶段任务

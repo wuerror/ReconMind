@@ -23,7 +23,6 @@ tools:
 
 # API 密钥
 api_keys:
-  fofa_email: "your@email.com"
   fofa_key: "xxxxxxxx"
   github_token: "ghp_xxxxxxxx"
   google_api_key: ""                   # 可选

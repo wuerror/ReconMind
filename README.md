@@ -1,22 +1,42 @@
 # ReconMind
 
 ReconMind 是一个面向红队被动信息收集的多阶段 Agent。  
-当前仓库已实现 P0 项目骨架：阶段编排、状态管理、基础工具、Prompt 拆分与断点恢复。
+当前仓库定位为 **P0 可运行骨架**：阶段编排、状态管理、基础工具、Prompt 拆分与断点恢复。
 
 ## 当前能力（P0）
 
 - 阶段编排：`company_info -> sensitive_info -> subdomain -> cyberspace -> fingerprint -> report`
 - 状态管理：`output/state.json`（支持中断恢复）
+- 状态契约（design-sync）：
+  - 侦察工具设计上应自动更新 `output/state.json`
+  - LLM 默认通过 `read_file("output/state.json")` 读取最新状态
+  - 仅少数字段（尤其 `sensitive_findings`）建议手动 `write_file` 回写
 - 基础工具：
   - `bash`
   - `read_file`
   - `write_file`
 - Prompt 组织：`prompts/shared_prefix.md` + 各阶段 `prompts/stage_*.md`
+- 轻量完成判定（代码侧）：
+  - `report` 阶段结束后检查 `output/target_report.md` 是否存在
+  - 当 `state.results.subdomains` 非空时，检查 `output/subdomain.txt` 非空
+  - 当 `state.results.urls` 非空时，检查 `output/url.txt` 非空
 - 协议兼容：
   - 优先 `responses`，自动兼容部分站点
   - 支持可选流式调用和推理强度配置
 
-> 说明：侦察类工具（ENScan、FOFA、Google Dork、GitHub Search、指纹识别等）当前为占位实现，后续在 P1/P2 完成。
+## 占位能力说明（当前未实现）
+
+以下模块目前仍是 placeholder，不提供真实侦察能力：
+
+- `tools/enscan.py`
+- `tools/subdomain.py`
+- `tools/fofa.py`
+- `tools/google_dork.py`
+- `tools/github_search.py`
+- `tools/fingerprint.py`
+- `tools/data_utils.py`
+
+P0 只保证 orchestrator、state、prompt、基础工具和恢复机制可运行；不宣称以上侦察能力已可用。
 
 ## 项目结构
 

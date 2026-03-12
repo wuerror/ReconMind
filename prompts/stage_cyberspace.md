@@ -40,7 +40,7 @@ cert.subject.org="公司名"                    # 证书组织名
 - 证书的 SAN (Subject Alternative Name) 可能暴露其他关联域名，注意观察
 - 非标准端口（8080、8443、9090、3000、8888等）上的服务通常是开发/测试/管理后台，安全防护弱
 - 如果某个IP上发现了多个端口，说明这可能是一台业务服务器而非CDN，价值更高
-- 新发现的域名和IP要回填 state.json
+- 新发现的域名/IP/URL 优先依赖 fofa_query 自动写入 state.json 和 url.txt，再通过 read_file 校验
 
 ### FOFA 结果分析
 
@@ -52,4 +52,4 @@ cert.subject.org="公司名"                    # 证书组织名
 
 ### 完成标志
 
-所有维度查询完成，所有发现的 URL/IP/域名 已更新到 state.json，同时更新 output/url.txt。输出统计摘要后结束。
+所有维度查询完成，state.json 与 output/url.txt 已反映最新资产结果后，输出统计摘要结束。

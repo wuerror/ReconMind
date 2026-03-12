@@ -7,7 +7,7 @@
 1. 先 read_file("output/state.json") 获取所有 URL
 2. 使用 observer_ward 对所有 URL 进行批量指纹识别
 3. 对未能识别的 URL 使用 screenshot 截图，检测 JS 加载情况
-4. 将指纹结果更新到 state.json 的 fingerprints 字段
+4. observer_ward 通常会自动更新 state.json 的 `fingerprints`，必要时再手动补写
 
 ### 目标分级（红队思维）
 
@@ -32,4 +32,4 @@
 
 ### 完成标志
 
-所有 URL 已识别或截图，fingerprints 字段已更新。输出按分级分类的摘要后结束。
+所有 URL 已识别或截图，且 state.json 中 fingerprints 已反映最新结果后，输出按分级分类的摘要结束。
