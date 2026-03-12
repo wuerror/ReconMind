@@ -1,0 +1,39 @@
+﻿# LLM 配置 —— 所有模型均通过 openai 库调用
+# 主力模型二选一，根据余额切换
+llm:
+  # 方案A: GPT-5.3-Codex（推理能力强，适合复杂阶段如 FOFA 查询构造和报告生成）
+  api_key: "sk-xxx"
+  base_url: "https://api.openai.com/v1"
+  model: "gpt-5.3-codex"
+  # api_mode: "auto"                  # 可选: auto | responses | chat
+  # stream: true                      # 可选: 是否使用流式调用
+  # reasoning_effort: "high"          # 可选: low | medium | high
+
+  # 方案B: Qwen-3.5-Plus（性价比高，适合日常使用）
+  # api_key: "sk-xxx"
+  # base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  # model: "qwen-3.5-plus"
+
+# 工具路径
+tools:
+  enscan_path: "./bin/ENScan_GO"
+  subfinder_path: "subfinder"          # 在PATH中
+  ksubdomain_path: "ksubdomain"
+  observer_ward_path: "observer_ward"
+
+# API 密钥
+api_keys:
+  fofa_email: "your@email.com"
+  fofa_key: "xxxxxxxx"
+  github_token: "ghp_xxxxxxxx"
+  google_api_key: ""                   # 可选
+  google_cx: ""                        # 可选
+
+# Agent 参数
+agent:
+  max_iterations: 30           # 单阶段最大迭代次数
+  timeout: 60                  # 单个工具调用超时(秒)
+  output_dir: "./output"
+  # llm_retries: 4                  # 可选: LLM请求重试次数
+  # llm_timeout: 120                # 可选: LLM请求超时(秒)
+

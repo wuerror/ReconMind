@@ -1,0 +1,14 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Runtime artifacts
+output/
+tmp/
+
+# Design / local notes
+design.md
+
+# OS / editor
+.DS_Store
+Thumbs.db
