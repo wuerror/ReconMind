@@ -12,3 +12,8 @@ design.md
 # OS / editor
 .DS_Store
 Thumbs.db
+
+# local test tools 
+bin/
+outs
+ksubdomain.yaml
