@@ -210,21 +210,6 @@ def _build_summary(
             break
         selected_count -= 1
 
-    if len(summary) < 500:
-        extra_lines = [
-            "",
-            "补充说明",
-            "本工具已在内部完成原始结果解析、state.json 去重追加写回，以及 raw_fofa 文件落盘。",
-            "可基于新域名决定是否回溯子域名阶段；高价值目标用于优先进入指纹与漏洞验证。",
-        ]
-        summary = summary + "\n" + "\n".join(extra_lines)
-
-    if len(summary) < 500:
-        pad = "请结合 raw_fofa 文件继续筛选；"
-        need = 500 - len(summary)
-        summary = summary + (pad * ((need // len(pad)) + 1))[:need]
-
-
     return summary
 
 

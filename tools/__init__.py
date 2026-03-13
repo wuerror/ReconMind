@@ -14,7 +14,7 @@ STAGE_TOOLS = {
     "sensitive_info": BASE_TOOLS + GOOGLE_TOOLS + GITHUB_TOOLS,
     "subdomain": BASE_TOOLS + SUB_TOOLS + DATA_TOOLS,
     "cyberspace": BASE_TOOLS + FOFA_TOOLS + DATA_TOOLS,
-    "fingerprint": BASE_TOOLS + FP_TOOLS,
+    "fingerprint": BASE_TOOLS + FP_TOOLS + FOFA_TOOLS,
     "report": BASE_TOOLS,
 }
 
