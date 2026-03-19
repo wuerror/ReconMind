@@ -148,7 +148,7 @@ def _parse_enscan_output(text):
     return sorted(companies), sorted(domains), sorted(emails)
 
 
-def enscan(company_name, options=""):
+def _run_enscan(company_name, options=""):
     try:
         if not company_name or not str(company_name).strip():
             return "Error: company_name is required"
@@ -200,6 +200,31 @@ def enscan(company_name, options=""):
             f"新增域名 {len(added_domains)} 个，新增邮箱 {len(added_emails)} 个，"
             f"已更新 state.json，原始输出: {raw_path}"
         )
+    except Exception as e:
+        return f"Error: {e}"
+
+
+def _is_cookie_expired(result):
+    return isinstance(result, str) and "timed out" in result.lower()
+
+
+def enscan(company_name, options=""):
+    try:
+        result = _run_enscan(company_name, options)
+        if not _is_cookie_expired(result):
+            return result
+
+        from .cookie_extract import refresh_cookies
+
+        refresh_result = refresh_cookies()
+        retry = _run_enscan(company_name, options)
+        if _is_cookie_expired(retry):
+            return (
+                "Error: ENScan 连续超时，Cookie 刷新后仍无法使用。\n"
+                f"Cookie 刷新结果: {refresh_result}\n"
+                "可能原因：平台需要验证码登录或账号密码有误。请在 config.yaml 的 credentials 段检查配置。"
+            )
+        return retry
     except Exception as e:
         return f"Error: {e}"
 

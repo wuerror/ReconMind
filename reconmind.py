@@ -10,7 +10,9 @@ from config import load_config
 from tools import STAGE_TOOLS, TOOL_FUNCTIONS
 
 
-STAGES = ["company_info", "sensitive_info", "subdomain", "cyberspace", "fingerprint", "report"]
+PASSIVE_STAGES = ["company_info", "sensitive_info", "subdomain", "cyberspace", "fingerprint", "report"]
+ACTIVE_STAGES = ["port_scan"]
+STAGES = PASSIVE_STAGES
 TOOL_OUTPUT_LIMIT = 4000
 STAGE_START_INSTRUCTION = (
     "请开始执行本阶段任务。侦察工具通常会自动更新 output/state.json 中的 "
@@ -45,9 +47,46 @@ API_MODE = str(config["llm"].get("api_mode", "auto")).strip().lower()
 if API_MODE not in {"auto", "responses", "chat"}:
     API_MODE = "auto"
 
+def _is_qwen_backend(cfg: Dict[str, Any]) -> bool:
+    base_url = str(cfg["llm"].get("base_url") or "").lower()
+    model = str(cfg["llm"].get("model") or "").lower()
+    return "dashscope" in base_url or model.startswith(("qwen", "qwq"))
+
+
+IS_QWEN_BACKEND = _is_qwen_backend(config)
+
 RESPONSES_STREAM_ENABLED = LLM_STREAM
-RESPONSES_REASONING_ENABLED = True
-CHAT_REASONING_ENABLED = True
+RESPONSES_REASONING_ENABLED = not IS_QWEN_BACKEND
+CHAT_REASONING_ENABLED = not IS_QWEN_BACKEND
+QWEN_RESPONSES_NOTICE_SHOWN = False
+
+
+def _notify_qwen_chat_only() -> None:
+    """Log once when DashScope(Qwen) backend forces chat.completions."""
+    global QWEN_RESPONSES_NOTICE_SHOWN
+    if QWEN_RESPONSES_NOTICE_SHOWN:
+        return
+    print(
+        "[LLM] 当前 base_url 指向 DashScope 兼容模式，"
+        "参见 qwen-api.md：仅支持 /v1/chat/completions，自动跳过 Responses 接口。"
+    )
+    QWEN_RESPONSES_NOTICE_SHOWN = True
+
+
+def _llm_mode_order() -> List[str]:
+    order = {
+        "auto": ["responses", "chat"],
+        "responses": ["responses", "chat"],
+        "chat": ["chat", "responses"],
+    }[API_MODE]
+    if not IS_QWEN_BACKEND:
+        return order
+    filtered = [mode for mode in order if mode != "responses"]
+    if len(filtered) != len(order):
+        _notify_qwen_chat_only()
+    if not filtered:
+        return ["chat"]
+    return filtered
 
 client = OpenAI(
     api_key=config["llm"]["api_key"],
@@ -71,11 +110,37 @@ def save_state(state: dict) -> None:
         json.dump(state, f, ensure_ascii=False, indent=2)
 
 
-def init_state(company_name: str, domains=None, ips=None) -> dict:
+def init_state(company_name: str, domains=None, ips=None, stages=None) -> dict:
     """初始化或加载已有 state（支持中断恢复）"""
+    stage_list = stages or STAGES
+
     if os.path.exists(state_path()):
         print("[恢复] 检测到已有 state.json，从上次进度继续")
-        return load_state()
+        state = load_state()
+
+        progress = state.get("progress")
+        if not isinstance(progress, dict):
+            progress = {}
+            state["progress"] = progress
+        for stage in stage_list:
+            if stage not in progress:
+                progress[stage] = "pending"
+
+        results = state.get("results")
+        if not isinstance(results, dict):
+            results = {}
+            state["results"] = results
+
+        for key in ["domains", "subdomains", "ips", "urls", "emails"]:
+            if not isinstance(results.get(key), list):
+                results[key] = []
+        if not isinstance(results.get("fingerprints"), dict):
+            results["fingerprints"] = {}
+        if not isinstance(results.get("sensitive_findings"), list):
+            results["sensitive_findings"] = []
+
+        save_state(state)
+        return state
 
     domains = domains or []
     ips = ips or []
@@ -85,7 +150,7 @@ def init_state(company_name: str, domains=None, ips=None) -> dict:
             "known_domains": domains,
             "known_ips": ips,
         },
-        "progress": {stage: "pending" for stage in STAGES},
+        "progress": {stage: "pending" for stage in stage_list},
         "results": {
             "domains": list(domains),
             "subdomains": [],
@@ -481,11 +546,7 @@ def run_stage(stage_name: str, state: dict) -> dict:
     stage_context = build_stage_context(stage_name, state)
     tools = STAGE_TOOLS[stage_name]
 
-    mode_order = {
-        "auto": ["responses", "chat"],
-        "responses": ["responses", "chat"],
-        "chat": ["chat", "responses"],
-    }[API_MODE]
+    mode_order = _llm_mode_order()
 
     for idx, mode in enumerate(mode_order):
         try:
@@ -552,23 +613,63 @@ def _complete_stage_or_raise(stage_name: str, state: dict) -> None:
     save_state(state)
 
 
-def run_recon(company_name: str, domains=None, ips=None) -> None:
-    state = init_state(company_name, domains, ips)
+def _maybe_auto_refresh_cookies():
+    try:
+        from tools.cookie_extract import get_empty_cookie_platforms, refresh_cookies
 
-    for stage in STAGES:
-        if state["progress"][stage] == "completed":
+        empty_platforms = get_empty_cookie_platforms()
+        if not empty_platforms:
+            return
+
+        credentials = config.get("credentials", {})
+        if not isinstance(credentials, dict):
+            return
+
+        refresh_targets = []
+        for platform in empty_platforms:
+            item = credentials.get(platform, {})
+            if not isinstance(item, dict):
+                continue
+            username = str(item.get("username", "") or "").strip()
+            password = str(item.get("password", "") or "").strip()
+            if username and password:
+                refresh_targets.append(platform)
+
+        if not refresh_targets:
+            return
+
+        print(f"[Cookie] 检测到空 Cookie 平台: {refresh_targets}，开始自动刷新")
+        refresh_result = refresh_cookies(refresh_targets)
+        print(refresh_result)
+    except Exception as exc:
+        print(f"[Cookie] 自动刷新失败: {_safe_console_text(str(exc))}")
+
+
+def run_recon(company_name: str, domains=None, ips=None, active=False) -> None:
+    stages = PASSIVE_STAGES[:-1] + ACTIVE_STAGES + ["report"] if active else PASSIVE_STAGES
+    state = init_state(company_name, domains, ips, stages=stages)
+
+    if active and state.get("progress", {}).get("port_scan") != "completed":
+        if state.get("progress", {}).get("report") == "completed":
+            state["progress"]["report"] = "pending"
+            save_state(state)
+
+    _maybe_auto_refresh_cookies()
+
+    for stage in stages:
+        if state["progress"].get(stage) == "completed":
             print(f"[跳过] {stage} 已完成")
             continue
 
-        domains_before = set(state["results"]["domains"])
+        domains_before = set(state.get("results", {}).get("domains", []))
 
         state["progress"][stage] = "in_progress"
         save_state(state)
         state = run_stage(stage, state)
         _complete_stage_or_raise(stage, state)
 
-        if stage == "cyberspace":
-            new_domains = set(state["results"]["domains"]) - domains_before
+        if stage == "cyberspace" and "subdomain" in stages:
+            new_domains = set(state.get("results", {}).get("domains", [])) - domains_before
             if new_domains:
                 print(f"\n[回溯] FOFA 发现 {len(new_domains)} 个新域名: {new_domains}")
                 print("[回溯] 重新执行子域名收集")
@@ -584,19 +685,47 @@ def run_recon(company_name: str, domains=None, ips=None) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="ReconMind - 红队被动信息收集Agent")
-    parser.add_argument("company", help="目标公司名称")
+    parser = argparse.ArgumentParser(description="ReconMind - 红队侦察 Agent")
+    parser.add_argument("company", nargs="?", help="目标公司名称")
     parser.add_argument("-d", "--domains", nargs="*", help="已知域名", default=[])
     parser.add_argument("-i", "--ips", nargs="*", help="已知IP", default=[])
     parser.add_argument("--reset", action="store_true", help="清除已有state，重新开始")
+    parser.add_argument("--active", action="store_true", help="启用主动模式（新增 port_scan 阶段）")
+    parser.add_argument("--scan", help="独立端口扫描目标（IP/CIDR）")
+    parser.add_argument("--ports", default="top2", help="配合 --scan 使用的端口范围")
+    parser.add_argument("--proxy", help="运行时覆盖 config.active.proxy")
+    parser.add_argument("--refresh-cookies", action="store_true", help="手动刷新 Cookie 后退出")
     args = parser.parse_args()
+
+    if args.proxy:
+        active_cfg = config.setdefault("active", {})
+        if not isinstance(active_cfg, dict):
+            active_cfg = {}
+            config["active"] = active_cfg
+        active_cfg["proxy"] = args.proxy
+        os.environ["RECONMIND_ACTIVE_PROXY"] = args.proxy
+
+    if args.refresh_cookies:
+        from tools.cookie_extract import refresh_cookies
+
+        print(refresh_cookies())
+        raise SystemExit(0)
+
+    if args.scan:
+        from tools.gogo import gogo_scan
+
+        print(gogo_scan(args.scan, args.ports))
+        raise SystemExit(0)
+
+    if not args.company:
+        parser.error("company is required unless using --scan or --refresh-cookies")
 
     if args.reset and os.path.exists(state_path()):
         os.remove(state_path())
         print("[重置] 已清除旧 state")
 
     try:
-        run_recon(args.company, args.domains, args.ips)
+        run_recon(args.company, args.domains, args.ips, active=args.active)
     except KeyboardInterrupt:
         print("\n[中断] 用户手动中断，当前进度已写入 state.json")
         raise SystemExit(130)

@@ -15,6 +15,11 @@ DEFAULT_CONFIG: Dict[str, Dict[str, Any]] = {
     },
     "tools": {},
     "api_keys": {},
+    "credentials": {},
+    "active": {
+        "proxy": "",
+        "gogo_threads": 0,
+    },
     "agent": {
         "max_iterations": 30,
         "timeout": 60,
@@ -30,6 +35,11 @@ def _merge_defaults(config: Dict[str, Any]) -> Dict[str, Any]:
         "llm": {**DEFAULT_CONFIG["llm"], **(config.get("llm") or {})},
         "tools": {**DEFAULT_CONFIG["tools"], **(config.get("tools") or {})},
         "api_keys": {**DEFAULT_CONFIG["api_keys"], **(config.get("api_keys") or {})},
+        "credentials": {
+            **DEFAULT_CONFIG["credentials"],
+            **(config.get("credentials") or {}),
+        },
+        "active": {**DEFAULT_CONFIG["active"], **(config.get("active") or {})},
         "agent": {**DEFAULT_CONFIG["agent"], **(config.get("agent") or {})},
     }
     return merged
